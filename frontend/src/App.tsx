@@ -1,6 +1,8 @@
 import { useState } from "react";
 import "./App.css";
 
+const API_URL = (import.meta.env.VITE_API_URL || "http://127.0.0.1:8000").replace(/\/$/, "");
+
 interface Activity {
   time: string;
   activity: string;
@@ -74,7 +76,7 @@ function App() {
     setTripsError("");
 
     try {
-      const response = await fetch("http://127.0.0.1:8000/api/trips");
+      const response = await fetch(`${API_URL}/api/trips`);
 
       if (!response.ok) {
         throw new Error("Could not load saved trips.");
@@ -96,7 +98,7 @@ function App() {
 
     try {
       const response = await fetch(
-        `http://127.0.0.1:8000/api/trips/${tripId}`
+        `${API_URL}/api/trips/${tripId}`
       );
 
       if (!response.ok) {
@@ -135,7 +137,7 @@ function App() {
 
     try {
       const response = await fetch(
-        "http://127.0.0.1:8000/api/itinerary",
+        `${API_URL}/api/itinerary`,
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -162,7 +164,7 @@ function App() {
       // Refresh the saved trips after successfully generating a trip.
       try {
         const tripsResponse = await fetch(
-          "http://127.0.0.1:8000/api/trips"
+          `${API_URL}/api/trips`
         );
 
         if (tripsResponse.ok) {
