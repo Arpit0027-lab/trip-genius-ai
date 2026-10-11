@@ -1,6 +1,5 @@
 import os
 import json
-from datetime import datetime
 from groq import Groq
 from dotenv import load_dotenv
 
@@ -17,7 +16,7 @@ def generate_itinerary(trip_data: dict) -> dict:
         )
 
     prompt = f"""
-You are an expert travel planner.
+You are an expert travel planner specializing in destinations across India.
 
 Create a practical, personalized travel itinerary using these preferences:
 
@@ -30,7 +29,7 @@ Number of travelers: {trip_data['travelers']}
 Interests: {', '.join(trip_data['interests'])}
 Travel style: {trip_data['travel_style']}
 
-Return ONLY one valid JSON object using this exact structure:
+Return exactly one valid JSON object with this structure:
 
 {{
   "destination": "string",
@@ -54,17 +53,18 @@ Return ONLY one valid JSON object using this exact structure:
 
 Requirements:
 - Generate one day for every date from the start date through the end date.
-- Include morning, afternoon, and evening activities for each day.
-- Personalize activities according to the interests and travel style.
-- Consider the total budget and number of travelers.
-- Use INR for all estimated costs.
-- All costs must be numbers, not strings.
+- Include morning, afternoon, and evening activities for every day.
+- Personalize activities using the interests and travel style.
+- Consider the budget and number of travelers.
+- Include relevant attractions, food, transportation, and experiences.
+- All costs must be numeric values in INR, not strings.
 - Every activity must contain time, activity, and estimated_cost.
 - Every day must contain day, title, and activities.
 - The final object must contain destination, summary, days,
   estimated_total_cost, and travel_tips.
+- Keep the response concise but complete.
 - Do not invent precise opening hours or claim prices are verified.
-- Return valid JSON only. Do not use Markdown fences or explanations.
+- Return valid JSON only, without Markdown or additional explanations.
 """
 
     response = client.chat.completions.create(
@@ -73,9 +73,11 @@ Requirements:
             {
                 "role": "system",
                 "content": (
-                    "You are a professional travel planner. "
-                    "Return a complete JSON object matching the requested "
-                    "schema. Do not return Markdown or additional text."
+                    "You are a professional travel planner specializing in India. "
+                    "Return one complete, valid JSON object matching the user's "
+                    "requested structure. Use double quotes for JSON keys and strings. "
+                    "Do not use Markdown or code fences. Keep the output concise "
+                    "and ensure the JSON is complete."
                 ),
             },
             {
@@ -83,17 +85,29 @@ Requirements:
                 "content": prompt,
             },
         ],
-        temperature=0.2,
+        temperature=0.1,
+        max_tokens=4096,
     )
 
-    content = response.choices[0].message.content
+    choice = response.choices[0]
+    content = choice.message.content
+
+    print("Groq finish reason:", choice.finish_reason)
+    print("Groq response length:", len(content or ""))
+    print("Groq response ending:", repr((content or "")[-500:]))
+
+    if choice.finish_reason == "length":
+        raise ValueError(
+            "The AI response reached its output token limit. "
+            "Try a shorter trip."
+        )
 
     if not content:
         raise ValueError("The AI returned an empty response.")
 
     content = content.strip()
 
-    # Remove Markdown fences if the model unexpectedly includes them.
+    # Remove Markdown code fences if present.
     if content.startswith("```"):
         lines = content.splitlines()
 
@@ -105,15 +119,20 @@ Requirements:
 
         content = "\n".join(lines).strip()
 
+    # Parse the AI response as JSON.
     try:
         result = json.loads(content)
     except json.JSONDecodeError as exc:
+        print("Invalid JSON returned by Groq:")
+        print(f"Error: {exc}")
+        print("Full AI response:")
+        print(content)
+
         raise ValueError(
-            f"The AI returned invalid JSON: {exc}. "
-            f"Response preview: {content[:300]}"
+            "The AI returned invalid JSON. Please try again."
         ) from exc
 
-    # Basic response validation before returning to FastAPI.
+    # Validate the required response fields.
     required_fields = {
         "destination",
         "summary",
@@ -133,20 +152,30 @@ Requirements:
         raise ValueError("The AI response contains no daily itinerary.")
 
     for day in result["days"]:
+        if not isinstance(day, dict):
+            raise ValueError("Each day must be a JSON object.")
+
         if not {"day", "title", "activities"}.issubset(day):
-            raise ValueError("A day in the AI response is missing required fields.")
+            raise ValueError(
+                "A day in the AI response is missing required fields."
+            )
 
         if not isinstance(day["activities"], list):
             raise ValueError("The activities field must be a list.")
 
         for activity in day["activities"]:
-            if not {
+            if not isinstance(activity, dict):
+                raise ValueError("Each activity must be a JSON object.")
+
+            required_activity_fields = {
                 "time",
                 "activity",
                 "estimated_cost",
-            }.issubset(activity):
+            }
+
+            if not required_activity_fields.issubset(activity):
                 raise ValueError(
-                    "An activity in the AI response is missing required fields."
+                    "An activity is missing required fields."
                 )
 
     return result
