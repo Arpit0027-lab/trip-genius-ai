@@ -141,3 +141,46 @@ def get_saved_trip(trip_id: str):
             status_code=500,
             detail=f"Failed to retrieve trip: {type(exc).__name__}: {exc}",
         )
+@app.delete("/api/trips/{trip_id}")
+def delete_saved_trip(trip_id: str):
+    try:
+        # Delete the associated itinerary records first.
+        supabase.table("itineraries").delete().eq(
+            "trip_id", trip_id
+        ).execute()
+
+        # Delete the associated itinerary records first.
+        supabase.table("itineraries").delete().eq(
+            "trip_id", trip_id
+        ).execute()
+
+        # Delete the trip itself.
+        deleted_trip = (
+            supabase.table("trips")
+            .delete()
+            .eq("id", trip_id)
+            .execute()
+        )
+
+        if not deleted_trip.data:
+            raise HTTPException(
+                status_code=500,
+                detail="The trip could not be deleted.",
+            )
+
+        return {
+            "message": "Trip deleted successfully.",
+            "trip_id": trip_id,
+        }
+
+    except HTTPException:
+        raise
+
+    except Exception as exc:
+        import traceback
+        traceback.print_exc()
+
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to delete trip: {type(exc).__name__}: {exc}",
+        )

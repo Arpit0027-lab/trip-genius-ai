@@ -61,6 +61,7 @@ function App() {
   const [savedTrips, setSavedTrips] = useState<SavedTrip[]>([]);
   const [tripsLoading, setTripsLoading] = useState(false);
   const [tripsError, setTripsError] = useState("");
+  const [deletingTripId, setDeletingTripId] = useState<string | null>(null);
   const [selectedTrip, setSelectedTrip] = useState<Itinerary | null>(null);
 
   const handleChange = (
@@ -123,6 +124,39 @@ function App() {
       setTripsError(
         err instanceof Error ? err.message : "Could not open this trip."
       );
+    }
+  };
+  const deleteSavedTrip = async (tripId: string) => {
+    const confirmed = window.confirm(
+      "Are you sure you want to permanently delete this saved trip?"
+    );
+  
+    if (!confirmed) return;
+  
+    setDeletingTripId(tripId);
+    setTripsError("");
+  
+    try {
+      const response = await fetch(`${API_URL}/api/trips/${tripId}`, {
+        method: "DELETE",
+      });
+  
+      if (!response.ok) {
+        const details = await response.text();
+        throw new Error(details || "Failed to delete the trip.");
+      }
+  
+      setSavedTrips((currentTrips) =>
+        currentTrips.filter((trip) => trip.id !== tripId)
+      );
+  
+      setSelectedTrip(null);
+    } catch (err) {
+      setTripsError(
+        err instanceof Error ? err.message : "Could not delete this trip."
+      );
+    } finally {
+      setDeletingTripId(null);
     }
   };
 
@@ -365,13 +399,24 @@ function App() {
                 {Number(trip.budget).toLocaleString("en-IN")}
               </p>
 
-              <button
-                type="button"
-                className="view-trip-button"
-                onClick={() => openSavedTrip(trip.id)}
-              >
-                View Itinerary →
-              </button>
+              <div className="saved-trip-actions">
+  <button
+    type="button"
+    className="view-trip-button"
+    onClick={() => openSavedTrip(trip.id)}
+  >
+    View Itinerary →
+  </button>
+
+  <button
+    type="button"
+    className="delete-trip-button"
+    onClick={() => deleteSavedTrip(trip.id)}
+    disabled={deletingTripId === trip.id}
+  >
+    {deletingTripId === trip.id ? "Deleting..." : "🗑 Delete"}
+  </button>
+</div>
             </article>
           ))}
         </div>
