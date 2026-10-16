@@ -64,6 +64,13 @@ function App() {
   const [deletingTripId, setDeletingTripId] = useState<string | null>(null);
   const [selectedTrip, setSelectedTrip] = useState<Itinerary | null>(null);
 
+  const [placesDestination, setPlacesDestination] = useState("");
+  const [foodType, setFoodType] = useState("all");
+  const [placesCategory, setPlacesCategory] = useState<"hotels" | "restaurants">("hotels");
+  const [placesLoading, setPlacesLoading] = useState(false);
+  const [placesError, setPlacesError] = useState("");
+  const [placesSearchUrl, setPlacesSearchUrl] = useState("");
+
   const handleChange = (
     event: React.ChangeEvent<
       HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement
@@ -157,6 +164,47 @@ function App() {
       );
     } finally {
       setDeletingTripId(null);
+    }
+  };
+
+  const findPlaces = async (
+    category: "hotels" | "restaurants",
+    destinationOverride?: string
+  ) => {
+    const destination = (destinationOverride || placesDestination || form.destination).trim();
+
+    if (!destination) {
+      setPlacesError("Enter a destination first.");
+      return;
+    }
+
+    setPlacesCategory(category);
+    setPlacesLoading(true);
+    setPlacesError("");
+    setPlacesSearchUrl("");
+
+    try {
+      const params = new URLSearchParams({ destination });
+      if (category === "restaurants") params.set("food_type", foodType);
+
+      const response = await fetch(
+        `${API_URL}/api/places/${category}?${params.toString()}`
+      );
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.detail || "Could not search places.");
+      }
+      if (!data.search_url) {
+        throw new Error("The server did not return a map search link.");
+      }
+
+      setPlacesSearchUrl(data.search_url);
+      window.open(data.search_url, "_blank", "noopener,noreferrer");
+    } catch (err) {
+      setPlacesError(err instanceof Error ? err.message : "Could not search places.");
+    } finally {
+      setPlacesLoading(false);
     }
   };
 
@@ -354,6 +402,69 @@ function App() {
         </form>
 
         {error && <div className="error-box">{error}</div>}
+      </section>
+
+      {/* Hotel and restaurant search */}
+      <section className="places-section">
+        <div className="section-heading">
+          <span className="step-label">EXPLORE YOUR DESTINATION</span>
+          <h2>Hotels & restaurants</h2>
+          <p>
+            Find current places on Google Maps. Check listings, opening hours,
+            and dietary options before visiting.
+          </p>
+        </div>
+
+        <div className="places-search-row">
+          <label className="places-destination-label">
+            Destination
+            <input
+              value={placesDestination}
+              onChange={(event) => setPlacesDestination(event.target.value)}
+              placeholder={form.destination || "e.g. Pachmarhi"}
+            />
+          </label>
+
+          <label>
+            Restaurant food preference
+            <select value={foodType} onChange={(event) => setFoodType(event.target.value)}>
+              <option value="all">All restaurants</option>
+              <option value="vegetarian">Vegetarian</option>
+              <option value="non-vegetarian">Non-vegetarian</option>
+              <option value="jain">Jain food</option>
+            </select>
+          </label>
+        </div>
+
+        <div className="places-buttons">
+          <button
+            type="button"
+            className="view-trip-button"
+            onClick={() => findPlaces("hotels", placesDestination || form.destination)}
+            disabled={placesLoading}
+          >
+            {placesLoading && placesCategory === "hotels" ? "Searching..." : "🏨 Find Hotels"}
+          </button>
+          <button
+            type="button"
+            className="view-trip-button"
+            onClick={() => findPlaces("restaurants", placesDestination || form.destination)}
+            disabled={placesLoading}
+          >
+            {placesLoading && placesCategory === "restaurants" ? "Searching..." : "🍽️ Find Restaurants"}
+          </button>
+        </div>
+
+        {placesError && <div className="error-box">{placesError}</div>}
+
+        {placesSearchUrl && (
+          <p className="places-result-link">
+            Search opened in a new tab. If it did not open,{" "}
+            <a href={placesSearchUrl} target="_blank" rel="noreferrer">
+              open results on Google Maps
+            </a>.
+          </p>
+        )}
       </section>
 
       {/* Saved Trips Section */}
